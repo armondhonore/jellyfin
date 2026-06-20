@@ -1,0 +1,15 @@
+application:
+  name: jellyfin
+  pods:
+    - name: app
+      image: jellyfin/jellyfin:latest
+      path: /
+      servicePorts:
+        - 8096
+      volumes:
+        - name: config
+          mountPath: /config
+          size: 5Gi
+        - name: media
+          mountPath: /media
+          size: 50Gi
