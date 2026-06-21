@@ -1,9 +1,9 @@
 # Nexlayer Build Failure Report
 
-**Pipeline:** 19eea239320
+**Pipeline:** 19eeb50f612
 **Repository:** https://github.com/armondhonore/jellyfin
 **Error category:** 
-**Error summary:** pipeline: wait for pod: runner container for job pipeline-19eea239-fix8 not running within 6m0s
+**Error summary:** pipeline: wait for pod: runner container for job pipeline-19eeb50f-fix6 not running within 6m0s
 
 ## Build log
 ```
@@ -23,24 +23,32 @@ _No build artifact files were captured from the repository._
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy everything to avoid missing Directory.Packages.props or nuget.config
+# Disable telemetry
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+
+# Copy all files to ensure Directory.Packages.props and global.json are present
 COPY . .
 
-# Use a single publish command with minimal flags to reduce complexity
-# -c Release: build in release mode
-# -o /app: output to /app
-# --no-restore is avoided here to let dotnet handle the complex dependency graph of Jellyfin in one go
-RUN dotnet publish Jellyfin.Server/Jellyfin.Server.csproj -c Release -o /app
+# The error "A compatible .NET SDK was not found" despite 8.0.422 being installed
+# often happens in .NET when global.json pins a version that doesn't match the image exactly
+# or when the solution structure is complex. 
+# We will build the solution first to ensure all project dependencies are resolved,
+# then publish the specific server project.
+RUN dotnet build Jellyfin.sln -c Release
+RUN dotnet publish Jellyfin.Server/Jellyfin.Server.csproj -c Release -o /app --no-build
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 
-# Jellyfin requires ffmpeg for transcoding and libicu for globalization
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libicu-dev && rm -rf /var/lib/apt/lists/*
+# Install ffmpeg and libicu for media processing and globalization
+RUN apt-get update && apt-get install -y --no-install-recommends \n    ffmpeg \n    libicu-dev \n    && rm -rf /var/lib/apt/lists/*
+
+# Ensure ICU is used for globalization
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 
 WORKDIR /app
 COPY --from=build /app .
 
-# Set standard Jellyfin port
+# Jellyfin default port
 ENV ASPNETCORE_URLS=http://+:8096
 ENV PORT=8096
 
