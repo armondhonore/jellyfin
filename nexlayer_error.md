@@ -1,9 +1,9 @@
 # Nexlayer Build Failure Report
 
-**Pipeline:** 19ee700c813
+**Pipeline:** 19eea239320
 **Repository:** https://github.com/armondhonore/jellyfin
 **Error category:** 
-**Error summary:** pipeline: wait for pod: runner container for job pipeline-19ee700c-fix8 not running within 6m0s
+**Error summary:** pipeline: wait for pod: runner container for job pipeline-19eea239-fix8 not running within 6m0s
 
 ## Build log
 ```
@@ -23,31 +23,29 @@ _No build artifact files were captured from the repository._
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy all files including props and config
+# Copy everything to avoid missing Directory.Packages.props or nuget.config
 COPY . .
 
-# Build the solution to ensure all project references are resolved
-# Jellyfin often requires the full solution context to resolve Directory.Packages.props
-RUN dotnet build Jellyfin.sln -c Release
-
-# Publish the specific server project
-RUN dotnet publish Jellyfin.Server/Jellyfin.Server.csproj -c Release -o /app --no-restore
+# Use a single publish command with minimal flags to reduce complexity
+# -c Release: build in release mode
+# -o /app: output to /app
+# --no-restore is avoided here to let dotnet handle the complex dependency graph of Jellyfin in one go
+RUN dotnet publish Jellyfin.Server/Jellyfin.Server.csproj -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 
-# Install ffmpeg and libicu (essential for Jellyfin media processing and globalization)
+# Jellyfin requires ffmpeg for transcoding and libicu for globalization
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libicu-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY --from=build /app .
 
-# Jellyfin defaults to 8096
+# Set standard Jellyfin port
 ENV ASPNETCORE_URLS=http://+:8096
 ENV PORT=8096
 
 EXPOSE 8096
 
-# Use the entry point for the server
 ENTRYPOINT ["dotnet", "Jellyfin.Server.dll"]
 ```
 
